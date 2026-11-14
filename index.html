@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>KHPAL GPS Admin Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #eef2f5; padding: 20px; margin: 0; color: #333; }
+        .container { max-width: 1100px; margin: auto; }
+        .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        h1, h2 { color: #2c3e50; margin-top: 0; }
+        input, select, button { padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #ccc; font-size: 14px; }
+        button { cursor: pointer; font-weight: bold; border: none; transition: 0.2s; }
+        .btn-primary { background: #3498db; color: white; }
+        .btn-primary:hover { background: #2980b9; }
+        .btn-success { background: #2ecc71; color: white; }
+        .btn-success:hover { background: #27ae60; }
+        .btn-danger { background: #e74c3c; color: white; }
+        .btn-danger:hover { background: #c0392b; }
+        
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab-btn { padding: 12px 20px; background: #d1d8e0; color: #333; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .tab-btn.active { background: #2c3e50; color: white; }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #f8f9fa; color: #555; }
+        tr:hover { background: #f1f1f1; }
+        
+        #loginSection { text-align: center; max-width: 400px; margin: 100px auto; }
+        #dashboardSection { display: none; }
+        .error { color: red; font-weight: bold; margin-top: 10px; }
+        .status-badge { background: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-size: 12px;}
+
+        /* New CSS for the Password Eye Button */
+        .password-wrapper { position: relative; width: 95%; margin: 0 auto 10px auto; }
+        .password-wrapper input { width: 100%; padding-right: 40px; box-sizing: border-box; margin: 0; }
+        .toggle-eye { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; font-size: 18px; user-select: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- LOGIN SECTION -->
+    <div class="card" id="loginSection">
+        <h2>Admin Login</h2>
+        <p>Enter your Admin Secret to view the dashboard.</p>
+        
+        <!-- Updated Password Field with Eye Button -->
+        <div class="password-wrapper">
+            <input type="password" id="adminSecret" placeholder="Enter ADMIN_SECRET">
+            <span class="toggle-eye" id="toggleEye" onclick="togglePassword()">👁️</span>
+        </div>
+        
+        <button class="btn-primary" onclick="login()" style="width: 95%;">Login</button>
+        <div id="loginError" class="error"></div>
+    </div>
+
+    <!-- DASHBOARD SECTION -->
+    <div id="dashboardSection">
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>KHPAL GPS Access Control</h2>
+                <button class="btn-primary" onclick="refreshCurrentTab()">Refresh Data</button>
+            </div>
+            
+            <div class="tabs">
+                <div class="tab-btn active" id="tab-pending" onclick="switchTab('pending')">Pending Requests</div>
+                <div class="tab-btn" id="tab-approved" onclick="switchTab('approved')">Approved Users</div>
+            </div>
+
+            <!-- PENDING TABLE -->
+            <div id="pendingView">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Contact Info</th>
+                            <th>Location</th>
+                            <th>Duration</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pendingBody">
+                        <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- APPROVED TABLE -->
+            <div id="approvedView" style="display: none;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Location</th>
+                            <th>Expires At</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="approvedBody">
+                        <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const API_URL = 'https://khpalgps-access-api.developerzb-test.workers.dev';
+    let adminSecretValue = '';
+    let currentTab = 'pending';
+
+    // New JS function to toggle password visibility
+    function togglePassword() {
+        const passwordInput = document.getElementById('adminSecret');
+        const toggleEye = document.getElementById('toggleEye');
+        
+        if (passwordInput.type === 'password') {
+            passwordInput.type = 'text';
+            toggleEye.innerText = '🙈'; // Closed eye icon
+        } else {
+            passwordInput.type = 'password';
+            toggleEye.innerText = '👁️'; // Open eye icon
+        }
+    }
+
+    function login() {
+        const secret = document.getElementById('adminSecret').value;
+        if(!secret) {
+            document.getElementById('loginError').innerText = "Please enter a secret.";
+            return;
+        }
+        adminSecretValue = secret;
+        document.getElementById('loginError').innerText = "";
+        document.getElementById('loginSection').style.display = 'none';
+        document.getElementById('dashboardSection').style.display = 'block';
+        switchTab('pending');
+    }
+
+    function switchTab(tab) {
+        currentTab = tab;
+        document.getElementById('tab-pending').classList.remove('active');
+        document.getElementById('tab-approved').classList.remove('active');
+        
+        if (tab === 'pending') {
+            document.getElementById('tab-pending').classList.add('active');
+            document.getElementById('pendingView').style.display = 'block';
+            document.getElementById('approvedView').style.display = 'none';
+            fetchPending();
+        } else {
+            document.getElementById('tab-approved').classList.add('active');
+            document.getElementById('pendingView').style.display = 'none';
+            document.getElementById('approvedView').style.display = 'block';
+            fetchApproved();
+        }
+    }
+
+    function refreshCurrentTab() {
+        if (currentTab === 'pending') fetchPending();
+        else fetchApproved();
+    }
+
+    async function fetchPending() {
+        const tableBody = document.getElementById('pendingBody');
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Loading...</td></tr>';
+
+        try {
+            const response = await fetch(`${API_URL}/api/admin/pending`, {
+                headers: { 'x-admin-secret': adminSecretValue }
+            });
+            
+            if(response.status === 401) { alert("Incorrect Secret."); location.reload(); return; }
+            const data = await response.json();
+            
+            if (data.success && data.users.length > 0) {
+                tableBody.innerHTML = '';
+                data.users.forEach(user => {
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td>#${user.id}</td>
+                            <td><strong>${user.name}</strong></td>
+                            <td>${user.email}<br><small>${user.mobile}</small></td>
+                            <td>${user.city}, ${user.country}</td>
+                            <td>
+                                <select id="duration_${user.id}">
+                                    <option value="30">1 Month</option>
+                                    <option value="90">3 Months</option>
+                                    <option value="180">6 Months</option>
+                                    <option value="365">1 Year</option>
+                                    <option value="0">Permanent</option>
+                                </select>
+                            </td>
+                            <td>
+                                <button class="btn-success" onclick="approveUser(${user.id})">Approve</button>
+                                <button class="btn-danger" onclick="declineUser(${user.id})">Decline</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: green;">No pending requests.</td></tr>';
+            }
+        } catch (err) {
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">Error: ${err.message}</td></tr>`;
+        }
+    }
+
+    async function fetchApproved() {
+        const tableBody = document.getElementById('approvedBody');
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">Loading...</td></tr>';
+
+        try {
+            const response = await fetch(`${API_URL}/api/admin/approved`, {
+                headers: { 'x-admin-secret': adminSecretValue }
+            });
+            
+            if(response.status === 401) { alert("Incorrect Secret."); location.reload(); return; }
+            const data = await response.json();
+            
+            if (data.success && data.users.length > 0) {
+                tableBody.innerHTML = '';
+                data.users.forEach(user => {
+                    const expDate = new Date(user.expires_at);
+                    const year = expDate.getFullYear();
+                    const dateStr = (year > 2100) ? "Permanent" : expDate.toLocaleDateString() + " " + expDate.toLocaleTimeString();
+                    
+                    tableBody.innerHTML += `
+                        <tr>
+                            <td>#${user.id}</td>
+                            <td><strong>${user.name}</strong></td>
+                            <td>${user.email}</td>
+                            <td>${user.city}, ${user.country}</td>
+                            <td><span class="status-badge">${dateStr}</span></td>
+                            <td>
+                                <button class="btn-danger" onclick="revokeUser(${user.id})">Revoke Access</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } else {
+                tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No approved users found.</td></tr>';
+            }
+        } catch (err) {
+            tableBody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: red;">Error: ${err.message}</td></tr>`;
+        }
+    }
+
+    async function approveUser(id) {
+        const duration = document.getElementById(`duration_${id}`).value;
+        try {
+            const response = await fetch(`${API_URL}/api/admin/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecretValue },
+                body: JSON.stringify({ id: id, duration_days: parseInt(duration) })
+            });
+            const data = await response.json();
+            if (data.success) fetchPending();
+            else alert("Error: " + data.error);
+        } catch (err) { alert("Network Error: " + err.message); }
+    }
+
+    async function declineUser(id) {
+        if(!confirm(`Are you sure you want to decline request #${id}?`)) return;
+        try {
+            const response = await fetch(`${API_URL}/api/admin/decline`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecretValue },
+                body: JSON.stringify({ id: id })
+            });
+            const data = await response.json();
+            if (data.success) fetchPending();
+        } catch (err) { alert("Network Error: " + err.message); }
+    }
+
+    async function revokeUser(id) {
+        if(!confirm(`Are you sure you want to revoke access for User #${id}? Their app will be locked immediately.`)) return;
+        try {
+            const response = await fetch(`${API_URL}/api/admin/revoke`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-admin-secret': adminSecretValue },
+                body: JSON.stringify({ id: id })
+            });
+            const data = await response.json();
+            if (data.success) fetchApproved();
+        } catch (err) { alert("Network Error: " + err.message); }
+    }
+</script>
+</body>
+</html>
